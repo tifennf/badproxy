@@ -4,6 +4,9 @@ use std::net::SocketAddr;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use regex::bytes::Regex;
+use reqwest::Url;
+
+
 
 const IP: &str = "0.0.0.0:3000";
 
@@ -29,52 +32,68 @@ fn main() {
     let listener = TcpListener::bind(IP).unwrap();
 
     for stream in listener.incoming() {
-        let mut request = [0; 500];
-        let mut response = [0; 4000];
 
+		//init
+        let mut request = [0; 4000];
+		let mut response = [0; 4000];
         let mut stream = stream.unwrap();
         log(&stream);
-
+		
         stream.read(&mut request).unwrap();
 
+
+		//some logs
         let format_request = String::from_utf8_lossy(&request);
         println!("Initial request: \n{}", format_request);
 
+
+		//extract host and other things from initial request
         let (hostline, hostname, port) = query_host(&regex, &request).unwrap();
+        // let hostname = dns_lookup::lookup_host(&String::from_utf8_lossy(hostname)).unwrap();
+		// let hostname = hostname.iter().next().unwrap().to_string();
+		let hostname = String::from_utf8_lossy(hostname);
 
-        let hostname_list = dns_lookup::lookup_host(&String::from_utf8_lossy(hostname)).unwrap();
+		println!("{}", hostname);
 
-		println!("hostvec {:?}", hostname);
+		let url = format!("https://{}", hostname);
+        
+		let mut res = reqwest::blocking::get("https://youtube.com").unwrap();
+		let mut body = String::new();
 
-		let req = format!("GET /index.html HTTP/1.1\r\nHost: {}\r\n\r\n", String::from_utf8_lossy(&hostname));
 
-		let request = req.as_bytes();
+		
+		// let headers = res.headers();
+		
+		// for (name, value) in headers.iter() {
+			
+		// 	println!("headers: {:?} : {:?}", name, value);
+		// }
 
-		println!("HTTP request: {}", req);
+		res.read_to_string(&mut body).expect("failed to read to string");
+		
+		// let test = res.
+		// let test = String::from_utf8_lossy(&test);
+		// println!("TEST: {:?}", &res);
+		
+		
 
-        let target_socket = SocketAddr::new(*hostname_list.iter().next().unwrap(), 80);
+		let client_response = format!(
+			"HTTPS/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+			body.len(),
+			body
+		);
 
-        let mut proxy_stream = TcpStream::connect(target_socket).expect("failed to connect");
-
-        proxy_stream
-            .write(&request)
-            .expect("failed to write request");
-
-        proxy_stream
-            .read(&mut response)
-            .expect("failed to read response");
-
-        stream.write(&response).expect("failed to write response");
-
-        println!("{:?}", proxy_stream);
-
-        println!(
-            "Data read from response: \n{}",
-            String::from_utf8_lossy(&response)
-        );
-    }
+		
+        stream.write(&client_response.as_bytes()).expect("failed to write response");
+		
+        // println!(
+			//     "Data read from response: \n{:?}",
+			//     body
+			// );
+		
+	}
 }
-
+	
 fn log(stream: &TcpStream) {
     println!("STREAM:: {:?}", stream);
     println!("localaddr: {}", stream.local_addr().unwrap());
@@ -113,3 +132,4 @@ fn query_host<'a>(
 
     Ok((host_line, hostname, port))
 }
+
